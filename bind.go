@@ -25,19 +25,18 @@ type command struct {
 }
 
 type fieldMeta struct {
-	Name     string        `json:"name"`
-	Kind     string        `json:"kind"`
-	About    string        `json:"about"`
-	Index    int           `json:"index"`
-	Default  *string       `json:"default,omitempty"`
-	Alias    *string       `json:"alias,omitempty"`
-	Required bool          `json:"required"`
-	Value    reflect.Value `json:"-"`
+	Name     string  `json:"name"`
+	Kind     string  `json:"kind"`
+	About    string  `json:"about"`
+	Index    int     `json:"index"`
+	Default  *string `json:"default,omitempty"`
+	Alias    *string `json:"alias,omitempty"`
+	Required bool    `json:"required"`
 }
 
 var ErrTypeNotSupported = errors.New("type not supported")
 
-func buildCommand(rv reflect.Value, parent *command, commandName string) (*command, error) {
+func buildCommand(rv reflect.Type, parent *command, commandName string) (*command, error) {
 	var err error
 
 	for rv.Kind() == reflect.Pointer {
@@ -53,14 +52,11 @@ func buildCommand(rv reflect.Value, parent *command, commandName string) (*comma
 		Command:  commandName,
 	}
 
-	rt := rv.Type()
-
 	for i := 0; i < rv.NumField(); i++ {
 		f := rv.Field(i)
-		sf := rt.Field(i)
-		st := sf.Tag
+		st := f.Tag
 
-		if f.Type().Kind() == reflect.Struct && f.Type().NumField() == 0 {
+		if f.Type.Kind() == reflect.Struct && f.Type.NumField() == 0 {
 			if v, ok := st.Lookup("command"); ok {
 				cmd.Command = v
 			}
@@ -80,12 +76,12 @@ func buildCommand(rv reflect.Value, parent *command, commandName string) (*comma
 		}
 
 		// skip unexported fields
-		if !sf.IsExported() {
+		if !f.IsExported() {
 			continue
 		}
 
 		if v, ok := st.Lookup("subcommand"); ok {
-			subcmd, err := buildCommand(f, cmd, v)
+			subcmd, err := buildCommand(f.Type, cmd, v)
 			if err != nil {
 				return nil, err
 			}
@@ -96,9 +92,8 @@ func buildCommand(rv reflect.Value, parent *command, commandName string) (*comma
 		if v, ok := st.Lookup("flag"); ok {
 			fm := fieldMeta{
 				Name:  v,
-				Kind:  f.Kind().String(),
+				Kind:  f.Type.Kind().String(),
 				Index: i,
-				Value: f,
 			}
 			if v, ok := st.Lookup("default"); ok {
 				fm.Default = &v
@@ -132,7 +127,7 @@ func (a *App) Help() string {
 	return a.c.Help
 }
 
-func Bind(v interface{}) (*App, error) {
+func NewApp(v interface{}) (*App, error) {
 	rv := reflect.ValueOf(v)
 	exe, err := os.Executable()
 	if err != nil {
@@ -144,7 +139,7 @@ func Bind(v interface{}) (*App, error) {
 	}
 	exe = strings.TrimSuffix(exe, ".exe")
 	exe = filepath.Base(exe)
-	cmd, err := buildCommand(rv, nil, exe)
+	cmd, err := buildCommand(rv.Type(), nil, exe)
 	if err != nil {
 		return nil, err
 	}
