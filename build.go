@@ -14,14 +14,15 @@ type command struct {
 	initOnce *sync.Once `json:"-"`
 	Parent   *command   `json:"-"`
 
-	Command     string      `json:"command"`
-	Author      *string     `json:"author,omitempty"`
-	About       *string     `json:"about,omitempty"`
-	LongAbout   *string     `json:"long_about,omitempty"`
-	Version     *string     `json:"version,omitempty"`
-	Flags       []fieldMeta `json:"flags"`
-	SubCommands []command   `json:"subcommands"`
-	Help        string      `json:"help"`
+	Type        reflect.Type `json:"-"`
+	Command     string       `json:"command"`
+	Author      *string      `json:"author,omitempty"`
+	About       *string      `json:"about,omitempty"`
+	LongAbout   *string      `json:"long_about,omitempty"`
+	Version     *string      `json:"version,omitempty"`
+	Flags       []fieldMeta  `json:"flags"`
+	SubCommands []command    `json:"subcommands"`
+	Help        string       `json:"help"`
 }
 
 type fieldMeta struct {
