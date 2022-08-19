@@ -25,24 +25,25 @@ type command struct {
 }
 
 type fieldMeta struct {
-	Name     string  `json:"name"`
-	Kind     string  `json:"kind"`
-	About    string  `json:"about"`
-	Index    int     `json:"index"`
-	Default  *string `json:"default,omitempty"`
-	Alias    *string `json:"alias,omitempty"`
-	Required bool    `json:"required"`
+	Type     reflect.Type `json:"-"`
+	Name     string       `json:"name"`
+	Kind     string       `json:"kind"`
+	About    string       `json:"about"`
+	Index    int          `json:"index"`
+	Default  *string      `json:"default,omitempty"`
+	Alias    *string      `json:"alias,omitempty"`
+	Required bool         `json:"required"`
 }
 
 var ErrTypeNotSupported = errors.New("type not supported")
 
-func buildCommand(rv reflect.Type, parent *command, commandName string) (*command, error) {
+func buildCommand(rt reflect.Type, parent *command, commandName string) (*command, error) {
 	var err error
 
-	for rv.Kind() == reflect.Pointer {
-		rv = rv.Elem()
+	for rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
 	}
-	if rv.Kind() != reflect.Struct {
+	if rt.Kind() != reflect.Struct {
 		return nil, ErrTypeNotSupported
 	}
 
@@ -52,8 +53,8 @@ func buildCommand(rv reflect.Type, parent *command, commandName string) (*comman
 		Command:  commandName,
 	}
 
-	for i := 0; i < rv.NumField(); i++ {
-		f := rv.Field(i)
+	for i := 0; i < rt.NumField(); i++ {
+		f := rt.Field(i)
 		st := f.Tag
 
 		if f.Type.Kind() == reflect.Struct && f.Type.NumField() == 0 {
