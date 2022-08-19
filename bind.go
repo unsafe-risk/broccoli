@@ -1,11 +1,12 @@
 package broccoli
 
 import (
+	"errors"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 )
-
-type None struct{}
 
 type command struct {
 	initOnce *sync.Once `json:"-"`
@@ -16,19 +17,108 @@ type command struct {
 	About       *string     `json:"about,omitempty"`
 	LongAbout   *string     `json:"long_about,omitempty"`
 	Version     *string     `json:"version,omitempty"`
-	Flags       []fieldMeta `json:"flag"`
+	Flags       []fieldMeta `json:"flags"`
 	SubCommands []command   `json:"subcommands"`
 	Help        string      `json:"help"`
 }
 
 type fieldMeta struct {
-	Name     string  `json:"name"`
-	Kind     string  `json:"kind"`
-	About    string  `json:"about"`
-	Index    int     `json:"index"`
-	Default  *string `json:"default,omitempty"`
-	Alias    *string `json:"alias"`
-	Required bool    `json:"required"`
+	Name     string        `json:"name"`
+	Kind     string        `json:"kind"`
+	About    string        `json:"about"`
+	Index    int           `json:"index"`
+	Default  *string       `json:"default,omitempty"`
+	Alias    *string       `json:"alias,omitempty"`
+	Required bool          `json:"required"`
+	Value    reflect.Value `json:"-"`
+}
+
+var ErrTypeNotSupported = errors.New("type not supported")
+
+func buildCommand(rv reflect.Value, parent *command, commandName string) (*command, error) {
+	var err error
+
+	for rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil, ErrTypeNotSupported
+	}
+
+	cmd := &command{
+		initOnce: &sync.Once{},
+		Parent:   parent,
+		Command:  commandName,
+	}
+
+	rt := rv.Type()
+
+	for i := 0; i < rv.NumField(); i++ {
+		f := rv.Field(i)
+		sf := rt.Field(i)
+		st := sf.Tag
+
+		// skip unexported fields
+		if !sf.IsExported() {
+			continue
+		}
+
+		if f.Kind() == reflect.Struct && f.Type().NumField() == 0 {
+			if v, ok := st.Lookup("command"); ok {
+				cmd.Command = v
+			}
+			if v, ok := st.Lookup("author"); ok {
+				cmd.Author = &v
+			}
+			if v, ok := st.Lookup("about"); ok {
+				cmd.About = &v
+			}
+			if v, ok := st.Lookup("long_about"); ok {
+				cmd.LongAbout = &v
+			}
+			if v, ok := st.Lookup("version"); ok {
+				cmd.Version = &v
+			}
+			continue
+		}
+
+		if v, ok := st.Lookup("subcommand"); ok {
+			subcmd, err := buildCommand(f, cmd, v)
+			if err != nil {
+				return nil, err
+			}
+			cmd.SubCommands = append(cmd.SubCommands, *subcmd)
+			continue
+		}
+
+		if v, ok := st.Lookup("flag"); ok {
+			fm := fieldMeta{
+				Name:  v,
+				Kind:  f.Kind().String(),
+				Index: i,
+				Value: f,
+			}
+			if v, ok := st.Lookup("default"); ok {
+				fm.Default = &v
+			}
+			if v, ok := st.Lookup("alias"); ok {
+				fm.Alias = &v
+			}
+			if v, ok := st.Lookup("required"); ok {
+				fm.Required, err = strconv.ParseBool(v)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if v, ok := st.Lookup("about"); ok {
+				fm.About = v
+			}
+			cmd.Flags = append(cmd.Flags, fm)
+			continue
+		}
+	}
+
+	return cmd, nil
 }
 
 func (a *command) init() {
