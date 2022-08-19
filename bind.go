@@ -271,12 +271,24 @@ func (a *command) init() {
 
 		// Write SubCommands
 		if len(a.SubCommands) > 0 {
-			sb.WriteString("The Commands are:\n")
+			sb.WriteString("Commands:\n")
+			var MaxLength int = 0
+			for i := range a.SubCommands {
+				if len(a.SubCommands[i].Command) > MaxLength {
+					MaxLength = len(a.SubCommands[i].Command)
+				}
+			}
+			MaxLength += 4
+
 			for i := range a.SubCommands {
 				sb.WriteString("\t")
 				sb.WriteString(a.SubCommands[i].Command)
-				if a.SubCommands[i].About != nil {
+
+				for j := 0; j < MaxLength-len(a.SubCommands[i].Command); j++ {
 					sb.WriteRune(' ')
+				}
+
+				if a.SubCommands[i].About != nil {
 					sb.WriteString(*a.SubCommands[i].About)
 				}
 				sb.WriteRune('\n')
