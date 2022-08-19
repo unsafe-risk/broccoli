@@ -149,6 +149,8 @@ func (a *command) init() {
 				sb.WriteRune('\n')
 			}
 		}
+
+		a.Help = sb.String()
 	})
 
 	for i := range a.SubCommands {
