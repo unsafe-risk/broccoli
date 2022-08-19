@@ -2,6 +2,8 @@ package broccoli
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -58,12 +60,7 @@ func buildCommand(rv reflect.Value, parent *command, commandName string) (*comma
 		sf := rt.Field(i)
 		st := sf.Tag
 
-		// skip unexported fields
-		if !sf.IsExported() {
-			continue
-		}
-
-		if f.Kind() == reflect.Struct && f.Type().NumField() == 0 {
+		if f.Type().Kind() == reflect.Struct && f.Type().NumField() == 0 {
 			if v, ok := st.Lookup("command"); ok {
 				cmd.Command = v
 			}
@@ -79,6 +76,11 @@ func buildCommand(rv reflect.Value, parent *command, commandName string) (*comma
 			if v, ok := st.Lookup("version"); ok {
 				cmd.Version = &v
 			}
+			continue
+		}
+
+		// skip unexported fields
+		if !sf.IsExported() {
 			continue
 		}
 
@@ -119,6 +121,35 @@ func buildCommand(rv reflect.Value, parent *command, commandName string) (*comma
 	}
 
 	return cmd, nil
+}
+
+type App struct {
+	c *command
+}
+
+func (a *App) Help() string {
+	a.c.init()
+	return a.c.Help
+}
+
+func Bind(v interface{}) (*App, error) {
+	rv := reflect.ValueOf(v)
+	exe, err := os.Executable()
+	if err != nil {
+		if len(os.Args) > 0 {
+			exe = os.Args[0]
+		} else {
+			exe = "unknown"
+		}
+	}
+	exe = strings.TrimSuffix(exe, ".exe")
+	exe = filepath.Base(exe)
+	cmd, err := buildCommand(rv, nil, exe)
+	if err != nil {
+		return nil, err
+	}
+	cmd.init()
+	return &App{c: cmd}, nil
 }
 
 func (a *command) init() {
@@ -174,6 +205,8 @@ func (a *command) init() {
 			for i := range a.Flags {
 				if a.Flags[i].Required {
 					sb.WriteRune(' ')
+					sb.WriteRune('-')
+					sb.WriteRune('-')
 					sb.WriteString(a.Flags[i].Name)
 					sb.WriteRune(' ')
 					sb.WriteRune('<')
@@ -221,6 +254,16 @@ func (a *command) init() {
 					sb.WriteRune(' ')
 				}
 				sb.WriteString(a.Flags[i].About)
+				sb.WriteRune(' ')
+				if a.Flags[i].Default != nil {
+					sb.WriteString("[default: ")
+					sb.WriteString(*a.Flags[i].Default)
+					sb.WriteRune(']')
+				}
+				if a.Flags[i].Required {
+					sb.WriteRune(' ')
+					sb.WriteString("(required)")
+				}
 				sb.WriteRune('\n')
 			}
 		}
