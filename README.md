@@ -1,2 +1,2 @@
 # broccoli
-Broccoli : CLI
+Broccoli: CLI
