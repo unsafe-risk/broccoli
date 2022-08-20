@@ -250,6 +250,28 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 				}
 			}
 			if !Found {
+				if cmd.Flags[i].Default != nil {
+					DstField := dst.Field(cmd.Flags[i].Index)
+					err = setValue(DstField, *cmd.Flags[i].Default)
+					switch err {
+					case errCanNotParse:
+						// Parse Error
+						return nil, cmd, fmt.Errorf("can not parse (default value) %s as %s", strconv.Quote(*cmd.Flags[i].Default), cmd.Flags[i].Kind)
+					case errCanNotSet:
+						// Ignore Error
+					case nil:
+						// No Error
+					default:
+						// Unknown Error
+						return nil, cmd, err
+					}
+					continue
+				}
+
+				if cmd.Flags[i].Kind == "bool" {
+					continue
+				}
+
 				return nil, cmd, fmt.Errorf("required parameter %s is missing", cmd.Flags[i].Name)
 			}
 		}
