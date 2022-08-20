@@ -162,13 +162,17 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 	var err error
 	var wfb [32]string
 	var WritedFields []string = wfb[:0]
+	var MaxIndex int = 0
 
 	for i := 0; i < len(args); i++ {
-		if strings.HasPrefix(args[i], "--") || strings.HasPrefix(args[i], "-") {
+		hasLongPrefix := strings.HasPrefix(args[i], "--")
+		hasShortPrefix := strings.HasPrefix(args[i], "-")
+
+		if hasLongPrefix || hasShortPrefix {
 			var name string
-			if strings.HasPrefix(args[i], "--") {
+			if hasLongPrefix {
 				name = args[i][2:]
-			} else if strings.HasPrefix(args[i], "-") {
+			} else if hasShortPrefix {
 				name = args[i][1:]
 			} else {
 				// Unreachable
@@ -176,7 +180,8 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 			}
 			var Found bool = false
 			for j := range cmd.Flags {
-				if cmd.Flags[j].Name == name {
+				if (hasLongPrefix && cmd.Flags[j].Name == name) ||
+					(hasShortPrefix && cmd.Flags[j].Alias != nil && *cmd.Flags[j].Alias == name) {
 					Found = true
 					if i+1 >= len(args) {
 						if cmd.Flags[j].Kind == "bool" {
@@ -223,11 +228,9 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 					return nil, cmd, ErrHelp
 				}
 			}
-		} else {
-			args = args[i:]
-			break
 		}
 
+		MaxIndex = i
 	}
 
 	// Check Required Fields
@@ -269,16 +272,15 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 					continue
 				}
 
-				if cmd.Flags[i].Kind == "bool" {
-					continue
-				}
-
 				return nil, cmd, fmt.Errorf("required parameter %s is missing", cmd.Flags[i].Name)
 			}
 		}
 	}
 
-	return args, cmd, nil
+	if len(args) <= 0 {
+		return args[0:], cmd, nil
+	}
+	return args[MaxIndex+1:], cmd, nil
 }
 
 var errCanNotParse = errors.New("can not parse")
