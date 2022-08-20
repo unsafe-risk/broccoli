@@ -1,6 +1,7 @@
 package broccoli
 
 import (
+	"math"
 	"reflect"
 	"testing"
 )
@@ -227,8 +228,8 @@ func TestBindOSArgs(t *testing.T) {
 			Name string   `flag:"name" about:"Your name"`
 			Age  int      `flag:"age" about:"Your age"`
 
-			Addr string `flag:"addr" about:"Your address"`
-			Zip  uint64 `flag:"zip" about:"Your zip code"`
+			Addr *string `flag:"addr" about:"Your address"`
+			Zip  *uint64 `flag:"zip" about:"Your zip code"`
 
 			Height float64 `flag:"height" about:"Your height"`
 			Weight float32 `flag:"weight" about:"Your weight"`
@@ -263,19 +264,19 @@ func TestBindOSArgs(t *testing.T) {
 			t.Errorf("expected age to be 42, got %d", app.Age)
 		}
 
-		if app.Addr != "123 Main St" {
-			t.Errorf("expected addr to be '123 Main St', got '%s'", app.Addr)
+		if *app.Addr != "123 Main St" {
+			t.Errorf("expected addr to be '123 Main St', got '%s'", *app.Addr)
 		}
 
-		if app.Zip != 12345 {
-			t.Errorf("expected zip to be 12345, got %d", app.Zip)
+		if *app.Zip != 12345 {
+			t.Errorf("expected zip to be 12345, got %d", *app.Zip)
 		}
 
-		if app.Height != 1.78 {
+		if !floatCompare(app.Height, 1.78) {
 			t.Errorf("expected height to be 1.78, got %f", app.Height)
 		}
 
-		if app.Weight != 80.5 {
+		if !floatCompare(float64(app.Weight), 80.5) {
 			t.Errorf("expected weight to be 80.5, got %f", app.Weight)
 		}
 
@@ -287,4 +288,8 @@ func TestBindOSArgs(t *testing.T) {
 			t.Errorf("expected clothes to be ['shirt', 'pants', 'hat'], got %v", app.Clothes)
 		}
 	})
+}
+
+func floatCompare(a, b float64) bool {
+	return math.Abs(a-b) < 0.00001
 }
