@@ -1,6 +1,7 @@
 package broccoli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -380,6 +381,15 @@ type App struct {
 func (a *App) Help() string {
 	a.c.init()
 	return a.c.Help
+}
+
+func (a *App) Schema() string {
+	a.c.init()
+	data, err := json.Marshal(a.c)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
 }
 
 func NewApp(v interface{}) (*App, error) {
