@@ -228,6 +228,8 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 					return nil, cmd, ErrHelp
 				}
 			}
+		} else {
+			break
 		}
 
 		MaxIndex = i
