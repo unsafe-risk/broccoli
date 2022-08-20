@@ -465,8 +465,8 @@ func BindOSArgs(dst interface{}) []string {
 			}
 
 			// Write Usage
+			sb.WriteRune('\n')
 			sb.WriteString(app.Help())
-
 			fmt.Print(sb.String())
 			os.Exit(0)
 		}
@@ -544,8 +544,8 @@ func (a *command) init() {
 
 				CommandNames[i] = ssb.String()
 			}
-
-			var MaxLength int = 0
+			const helpOption = "\t-h, --help "
+			var MaxLength int = len(helpOption)
 			for i := range CommandNames {
 				if len(CommandNames[i]) > MaxLength {
 					MaxLength = len(CommandNames[i])
@@ -571,6 +571,13 @@ func (a *command) init() {
 				}
 				sb.WriteRune('\n')
 			}
+
+			sb.WriteString(helpOption)
+			for j := 0; j < MaxLength-len(helpOption); j++ {
+				sb.WriteRune(' ')
+			}
+			sb.WriteString("Print this help message and exit")
+			sb.WriteRune('\n')
 		}
 		sb.WriteRune('\n')
 
