@@ -372,7 +372,7 @@ func setValue(dst reflect.Value, value string) error {
 	case reflect.Slice:
 		val := strings.Split(value, ",")
 		if dst.Cap() < len(val) {
-			dst.Set(reflect.MakeSlice(dst.Type().Elem(), len(val), len(val)))
+			dst.Set(reflect.MakeSlice(dst.Type(), len(val), len(val)))
 		} else {
 			dst.SetLen(len(val))
 		}

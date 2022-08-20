@@ -220,4 +220,71 @@ func TestBindOSArgs(t *testing.T) {
 			t.Error("expected Bool2 to be true")
 		}
 	})
+
+	t.Run("test-flags", func(t *testing.T) {
+		type TestApp struct {
+			_    struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
+			Name string   `flag:"name" about:"Your name"`
+			Age  int      `flag:"age" about:"Your age"`
+
+			Addr string `flag:"addr" about:"Your address"`
+			Zip  uint64 `flag:"zip" about:"Your zip code"`
+
+			Height float64 `flag:"height" about:"Your height"`
+			Weight float32 `flag:"weight" about:"Your weight"`
+
+			IsDeveloper bool `flag:"dev" alias:"d" about:"Are you a developer?"`
+
+			Clothes []string `flag:"clothes" about:"Your clothes"`
+		}
+
+		var app TestApp
+		args, _, err := Bind(&app, []string{"--name", "John Doe",
+			"--age", "42",
+			"--addr", "123 Main St",
+			"--zip", "12345",
+			"--height", "1.78",
+			"--weight", "80.5",
+			"--dev",
+			"--clothes", "shirt,pants,hat",
+			"extra", "args"})
+		if err != nil {
+			t.Error(err)
+		}
+		if !reflect.DeepEqual(args, []string{"extra", "args"}) {
+			t.Errorf("expected args to be ['extra', 'args'], got %v", args)
+		}
+
+		if app.Name != "John Doe" {
+			t.Errorf("expected name to be 'John Doe', got '%s'", app.Name)
+		}
+
+		if app.Age != 42 {
+			t.Errorf("expected age to be 42, got %d", app.Age)
+		}
+
+		if app.Addr != "123 Main St" {
+			t.Errorf("expected addr to be '123 Main St', got '%s'", app.Addr)
+		}
+
+		if app.Zip != 12345 {
+			t.Errorf("expected zip to be 12345, got %d", app.Zip)
+		}
+
+		if app.Height != 1.78 {
+			t.Errorf("expected height to be 1.78, got %f", app.Height)
+		}
+
+		if app.Weight != 80.5 {
+			t.Errorf("expected weight to be 80.5, got %f", app.Weight)
+		}
+
+		if !app.IsDeveloper {
+			t.Error("expected IsDeveloper to be true")
+		}
+
+		if !reflect.DeepEqual(app.Clothes, []string{"shirt", "pants", "hat"}) {
+			t.Errorf("expected clothes to be ['shirt', 'pants', 'hat'], got %v", app.Clothes)
+		}
+	})
 }
