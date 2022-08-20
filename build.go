@@ -2,6 +2,7 @@ package broccoli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +17,7 @@ type command struct {
 
 	Type        reflect.Type `json:"-"`
 	Command     string       `json:"command"`
+	Index       int          `json:"index"`
 	Author      *string      `json:"author,omitempty"`
 	About       *string      `json:"about,omitempty"`
 	LongAbout   *string      `json:"long_about,omitempty"`
@@ -36,7 +38,7 @@ type fieldMeta struct {
 	Required bool         `json:"required"`
 }
 
-var ErrTypeNotSupported = errors.New("type not supported")
+var ErrTypeNotSupported = errors.New("broccoli: type not supported")
 
 func buildCommand(rt reflect.Type, parent *command, commandName string) (*command, error) {
 	var err error
@@ -52,6 +54,7 @@ func buildCommand(rt reflect.Type, parent *command, commandName string) (*comman
 		initOnce: &sync.Once{},
 		Parent:   parent,
 		Command:  commandName,
+		Type:     rt,
 	}
 
 	for i := 0; i < rt.NumField(); i++ {
@@ -87,14 +90,19 @@ func buildCommand(rt reflect.Type, parent *command, commandName string) (*comman
 			if err != nil {
 				return nil, err
 			}
+			subcmd.Index = i
 			cmd.SubCommands = append(cmd.SubCommands, *subcmd)
 			continue
 		}
 
 		if v, ok := st.Lookup("flag"); ok {
+			var t reflect.Type = f.Type
+			for t.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
 			fm := fieldMeta{
 				Name:  v,
-				Kind:  f.Type.Kind().String(),
+				Kind:  t.Kind().String(),
 				Index: i,
 			}
 			if v, ok := st.Lookup("default"); ok {
@@ -118,6 +126,219 @@ func buildCommand(rt reflect.Type, parent *command, commandName string) (*comman
 	}
 
 	return cmd, nil
+}
+
+var ErrTypeMismatch = errors.New("broccoli: type mismatch")
+var ErrMissingRequiredField = errors.New("broccoli: missing required field")
+
+func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, error) {
+	for dst.Kind() == reflect.Pointer {
+		if dst.IsNil() {
+			dst.Set(reflect.New(dst.Type().Elem()))
+		}
+		dst = dst.Elem()
+	}
+
+	if dst.Kind() != reflect.Struct {
+		return nil, ErrTypeNotSupported
+	}
+
+	if dst.Type() != cmd.Type {
+		return nil, ErrTypeMismatch
+	}
+
+	if len(args) > 0 {
+		// Check SubCommands
+		for i := range cmd.SubCommands {
+			if cmd.SubCommands[i].Command == args[0] {
+				return bindCommand(&cmd.SubCommands[i], args[1:], dst.Field(cmd.SubCommands[i].Index))
+			}
+		}
+	}
+
+	var err error
+	var wfb [32]string
+	var WritedFields []string = wfb[:0]
+
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "--") || strings.HasPrefix(args[i], "-") {
+			var name string
+			if strings.HasPrefix(args[i], "--") {
+				name = args[i][2:]
+			} else if strings.HasPrefix(args[i], "-") {
+				name = args[i][1:]
+			} else {
+				// Unreachable
+				panic("unreachable")
+			}
+
+			for j := range cmd.Flags {
+				if cmd.Flags[j].Name == name {
+					if i+1 >= len(args) {
+						if cmd.Flags[j].Kind == "bool" {
+							Dest := dst.Field(cmd.Flags[j].Index)
+							for Dest.Kind() == reflect.Pointer {
+								if Dest.IsNil() {
+									Dest.Set(reflect.New(Dest.Type().Elem()))
+								}
+								Dest = Dest.Elem()
+							}
+							if Dest.CanSet() {
+								Dest.SetBool(true)
+							}
+							WritedFields = append(WritedFields, args[i])
+							continue
+						} else {
+							return nil, fmt.Errorf("%s requires %s", name, cmd.Flags[j].Kind)
+						}
+					}
+
+					value := args[i+1]
+					DstField := dst.Field(cmd.Flags[j].Index)
+					err = setValue(DstField, value)
+
+					switch err {
+					case errCanNotParse:
+						// Parse Error
+						return nil, fmt.Errorf("can not parse %s as %s", strconv.Quote(value), cmd.Flags[j].Kind)
+					case errCanNotSet:
+						// Ignore Error
+					case nil:
+						// No Error
+					default:
+						// Unknown Error
+						return nil, err
+					}
+					WritedFields = append(WritedFields, args[i])
+					i++
+				}
+			}
+		} else {
+			args = args[i:]
+			break
+		}
+	}
+
+	// Check Required Fields
+	for i := range cmd.Flags {
+		if cmd.Flags[i].Required {
+			var Found bool = false
+			for j := range WritedFields {
+				if strings.HasPrefix(WritedFields[j], "--") {
+					if WritedFields[j][2:] == cmd.Flags[i].Name {
+						Found = true
+						break
+					}
+				} else if strings.HasPrefix(WritedFields[j], "-") {
+					if WritedFields[j][1:] == cmd.Flags[i].Name {
+						Found = true
+						break
+					}
+				} else {
+					// Unreachable
+					panic("unreachable")
+				}
+			}
+			if !Found {
+				return nil, fmt.Errorf("required parameter %s is missing", cmd.Flags[i].Name)
+			}
+		}
+	}
+
+	return args, nil
+}
+
+var errCanNotParse = errors.New("can not parse")
+var errCanNotSet = errors.New("can not set")
+
+func setValue(dst reflect.Value, value string) error {
+	var err error
+
+	for dst.Kind() == reflect.Pointer {
+		if dst.IsNil() {
+			dst.Set(reflect.New(dst.Type().Elem()))
+		}
+		dst = dst.Elem()
+	}
+
+	if !dst.CanSet() {
+		return errCanNotSet
+	}
+
+	switch dst.Kind() {
+	case reflect.String:
+		dst.SetString(value)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		var val int64
+		if strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X") ||
+			strings.HasPrefix(value, "-0x") || strings.HasPrefix(value, "-0X") ||
+			strings.HasPrefix(value, "+0x") || strings.HasPrefix(value, "+0X") {
+			val, err = strconv.ParseInt(value[2:], 16, 64)
+		} else if strings.HasPrefix(value, "0b") || strings.HasPrefix(value, "0B") ||
+			strings.HasPrefix(value, "-0b") || strings.HasPrefix(value, "-0B") ||
+			strings.HasPrefix(value, "+0b") || strings.HasPrefix(value, "+0B") {
+			val, err = strconv.ParseInt(value[2:], 2, 64)
+		} else if strings.HasPrefix(value, "0o") || strings.HasPrefix(value, "0O") ||
+			strings.HasPrefix(value, "-0o") || strings.HasPrefix(value, "-0O") ||
+			strings.HasPrefix(value, "+0o") || strings.HasPrefix(value, "+0O") {
+			val, err = strconv.ParseInt(value[2:], 8, 64)
+		} else {
+			val, err = strconv.ParseInt(value, 10, 64)
+		}
+		if err != nil {
+			return errCanNotParse
+		}
+		dst.SetInt(val)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		var val uint64
+		if strings.HasPrefix(value, "0x") || strings.HasPrefix(value, "0X") ||
+			strings.HasPrefix(value, "-0x") || strings.HasPrefix(value, "-0X") ||
+			strings.HasPrefix(value, "+0x") || strings.HasPrefix(value, "+0X") {
+			val, err = strconv.ParseUint(value[2:], 16, 64)
+		} else if strings.HasPrefix(value, "0b") || strings.HasPrefix(value, "0B") ||
+			strings.HasPrefix(value, "-0b") || strings.HasPrefix(value, "-0B") ||
+			strings.HasPrefix(value, "+0b") || strings.HasPrefix(value, "+0B") {
+			val, err = strconv.ParseUint(value[2:], 2, 64)
+		} else if strings.HasPrefix(value, "0o") || strings.HasPrefix(value, "0O") ||
+			strings.HasPrefix(value, "-0o") || strings.HasPrefix(value, "-0O") ||
+			strings.HasPrefix(value, "+0o") || strings.HasPrefix(value, "+0O") {
+			val, err = strconv.ParseUint(value[2:], 8, 64)
+		} else {
+			val, err = strconv.ParseUint(value, 10, 64)
+		}
+		if err != nil {
+			return errCanNotParse
+		}
+		dst.SetUint(val)
+	case reflect.Float32, reflect.Float64:
+		var val float64
+		val, err = strconv.ParseFloat(value, 64)
+		if err != nil {
+			return errCanNotParse
+		}
+		dst.SetFloat(val)
+	case reflect.Bool:
+		var val bool
+		val, err = strconv.ParseBool(value)
+		if err != nil {
+			return errCanNotParse
+		}
+		dst.SetBool(val)
+	case reflect.Slice:
+		val := strings.Split(value, ",")
+		if dst.Cap() < len(val) {
+			dst.Set(reflect.MakeSlice(dst.Type().Elem(), len(val), len(val)))
+		} else {
+			dst.SetLen(len(val))
+		}
+		for i := 0; i < len(val); i++ {
+			err = setValue(dst.Index(i), val[i])
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return err
 }
 
 type App struct {
