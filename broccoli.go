@@ -130,8 +130,10 @@ func buildCommand(rt reflect.Type, parent *command, commandName string) (*comman
 
 var ErrTypeMismatch = errors.New("broccoli: type mismatch")
 var ErrMissingRequiredField = errors.New("broccoli: missing required field")
+var ErrHelp = errors.New("broccoli: help")
 
-func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, error) {
+func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *command, error) {
+	cmd.init()
 	for dst.Kind() == reflect.Pointer {
 		if dst.IsNil() {
 			dst.Set(reflect.New(dst.Type().Elem()))
@@ -140,11 +142,11 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, erro
 	}
 
 	if dst.Kind() != reflect.Struct {
-		return nil, ErrTypeNotSupported
+		return nil, cmd, ErrTypeMismatch
 	}
 
 	if dst.Type() != cmd.Type {
-		return nil, ErrTypeMismatch
+		return nil, cmd, ErrTypeMismatch
 	}
 
 	if len(args) > 0 {
@@ -171,9 +173,10 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, erro
 				// Unreachable
 				panic("unreachable")
 			}
-
+			var Found bool = false
 			for j := range cmd.Flags {
 				if cmd.Flags[j].Name == name {
+					Found = true
 					if i+1 >= len(args) {
 						if cmd.Flags[j].Kind == "bool" {
 							Dest := dst.Field(cmd.Flags[j].Index)
@@ -187,9 +190,9 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, erro
 								Dest.SetBool(true)
 							}
 							WritedFields = append(WritedFields, args[i])
-							continue
+							break
 						} else {
-							return nil, fmt.Errorf("%s requires %s", name, cmd.Flags[j].Kind)
+							return nil, cmd, fmt.Errorf("%s requires %s", name, cmd.Flags[j].Kind)
 						}
 					}
 
@@ -200,23 +203,30 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, erro
 					switch err {
 					case errCanNotParse:
 						// Parse Error
-						return nil, fmt.Errorf("can not parse %s as %s", strconv.Quote(value), cmd.Flags[j].Kind)
+						return nil, cmd, fmt.Errorf("can not parse %s as %s", strconv.Quote(value), cmd.Flags[j].Kind)
 					case errCanNotSet:
 						// Ignore Error
 					case nil:
 						// No Error
 					default:
 						// Unknown Error
-						return nil, err
+						return nil, cmd, err
 					}
 					WritedFields = append(WritedFields, args[i])
 					i++
+				}
+			}
+			if !Found {
+				// Handle Help
+				if args[i] == "--help" || args[i] == "-h" {
+					return nil, cmd, ErrHelp
 				}
 			}
 		} else {
 			args = args[i:]
 			break
 		}
+
 	}
 
 	// Check Required Fields
@@ -240,12 +250,12 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, erro
 				}
 			}
 			if !Found {
-				return nil, fmt.Errorf("required parameter %s is missing", cmd.Flags[i].Name)
+				return nil, cmd, fmt.Errorf("required parameter %s is missing", cmd.Flags[i].Name)
 			}
 		}
 	}
 
-	return args, nil
+	return args, cmd, nil
 }
 
 var errCanNotParse = errors.New("can not parse")
@@ -370,31 +380,71 @@ func NewApp(v interface{}) (*App, error) {
 	return &App{c: cmd}, nil
 }
 
+func (a *App) Bind(dst interface{}, args []string) ([]string, App, error) {
+	ra, cmd, err := bindCommand(a.c, args, reflect.ValueOf(dst))
+	if err != nil {
+		return args, App{c: cmd}, err
+	}
+	return ra, App{c: cmd}, nil
+}
+
+func Bind(dst interface{}, args []string) ([]string, App, error) {
+	a, err := NewApp(dst)
+	if err != nil {
+		return args, App{}, err
+	}
+	return a.Bind(dst, args)
+}
+
+func BindOSArgs(dst interface{}) []string {
+	a, err := NewApp(dst)
+	if err != nil {
+		panic(err)
+	}
+	a.c.init()
+	ra, app, err := a.Bind(dst, os.Args[1:])
+	if err != nil {
+		if err == ErrHelp {
+			var sb strings.Builder
+
+			// Write Command and Version
+			sb.WriteString(app.c.Command)
+			if a.c.Version != nil {
+				sb.WriteRune(' ')
+				sb.WriteString(*app.c.Version)
+			}
+			sb.WriteRune('\n')
+
+			// Write Author
+			if a.c.Author != nil {
+				sb.WriteString(*app.c.Author)
+				sb.WriteRune('\n')
+			}
+
+			// Write LongAbout
+			if a.c.LongAbout != nil {
+				sb.WriteString(*app.c.LongAbout)
+				sb.WriteRune('\n')
+			}
+
+			// Write Usage
+			sb.WriteString(app.Help())
+
+			fmt.Print(sb.String())
+			os.Exit(0)
+		}
+
+		fmt.Fprintln(os.Stderr, err.Error())
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, app.Help())
+		os.Exit(1)
+	}
+	return ra
+}
+
 func (a *command) init() {
 	a.initOnce.Do(func() {
 		var sb strings.Builder
-
-		// Write Command and Version
-		sb.WriteString(a.Command)
-		if a.Version != nil {
-			sb.WriteRune(' ')
-			sb.WriteString(*a.Version)
-		}
-		sb.WriteRune('\n')
-
-		// Write Author
-		if a.Author != nil {
-			sb.WriteString(*a.Author)
-			sb.WriteRune('\n')
-		}
-
-		// Write LongAbout
-		if a.LongAbout != nil {
-			sb.WriteString(*a.LongAbout)
-			sb.WriteRune('\n')
-		}
-
-		sb.WriteRune('\n')
 
 		// Write Usage
 		sb.WriteString("Usage: \n\t")
