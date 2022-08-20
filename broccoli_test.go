@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestBindOSArgs(t *testing.T) {
+func TestBindArgs(t *testing.T) {
 	t.Run("test-no-args", func(t *testing.T) {
 		type NoArgsApp struct {
 			_ struct{} `version:"1.0.0" command:"NoArgsApp" about:"This is a test app"`
@@ -174,7 +174,7 @@ func TestBindOSArgs(t *testing.T) {
 			Bool2 bool     `flag:"bool2" about:"A boolean flag"`
 		}
 		var app TestApp
-		args, _, err := Bind(&app, []string{"--bool0", "--bool1", "false", "--bool2", "True"})
+		args, _, err := Bind(&app, []string{"--bool0", "--!bool1", "--bool2"})
 		if err != nil {
 			t.Error(err)
 		}
@@ -203,7 +203,7 @@ func TestBindOSArgs(t *testing.T) {
 			Bool2 bool     `flag:"bool2" about:"A boolean flag" default:"true" alias:"b2"`
 		}
 		var app TestApp
-		args, _, err := Bind(&app, []string{"-b0", "false", "-b1", "-b2"})
+		args, _, err := Bind(&app, []string{"-!b0", "-b1", "-b2"})
 		if err != nil {
 			t.Error(err)
 		}
@@ -225,8 +225,8 @@ func TestBindOSArgs(t *testing.T) {
 	t.Run("test-flags", func(t *testing.T) {
 		type TestApp struct {
 			_    struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
-			Name string   `flag:"name" about:"Your name"`
-			Age  int      `flag:"age" about:"Your age"`
+			Name string   `flag:"name" about:"Your name" required:"true"`
+			Age  int      `flag:"age" about:"Your age" required:"true"`
 
 			Addr *string `flag:"addr" about:"Your address"`
 			Zip  *uint64 `flag:"zip" about:"Your zip code"`
@@ -234,9 +234,9 @@ func TestBindOSArgs(t *testing.T) {
 			Height float64 `flag:"height" about:"Your height"`
 			Weight float32 `flag:"weight" about:"Your weight"`
 
-			IsDeveloper bool `flag:"dev" alias:"d" about:"Are you a developer?"`
+			IsDeveloper bool `flag:"dev" alias:"d" about:"Are you a developer?" default:"false"`
 
-			Clothes []string `flag:"clothes" about:"Your clothes"`
+			Clothes []string `flag:"clothes" alias:"c" about:"Your clothes" required:"true"`
 		}
 
 		var app TestApp
@@ -247,7 +247,7 @@ func TestBindOSArgs(t *testing.T) {
 			"--height", "1.78",
 			"--weight", "80.5",
 			"--dev",
-			"--clothes", "shirt,pants,hat",
+			"-c", "shirt,pants,hat",
 			"extra", "args"})
 		if err != nil {
 			t.Error(err)

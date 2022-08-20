@@ -178,39 +178,37 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 				// Unreachable
 				panic("unreachable")
 			}
+			rawName := name
+			name = strings.TrimPrefix(name, "!")
+
 			var Found bool = false
 			for j := range cmd.Flags {
 				if (hasLongPrefix && cmd.Flags[j].Name == name) ||
 					(hasShortPrefix && cmd.Flags[j].Alias != nil && *cmd.Flags[j].Alias == name) {
 					Found = true
-					if i+1 >= len(args) {
-						if cmd.Flags[j].Kind == "bool" {
-							Dest := dst.Field(cmd.Flags[j].Index)
-							for Dest.Kind() == reflect.Pointer {
-								if Dest.IsNil() {
-									Dest.Set(reflect.New(Dest.Type().Elem()))
-								}
-								Dest = Dest.Elem()
-							}
-							if Dest.CanSet() {
-								Dest.SetBool(true)
-							}
-							WritedFields = append(WritedFields, args[i])
-							break
-						} else {
-							return nil, cmd, fmt.Errorf("%s requires %s", name, cmd.Flags[j].Kind)
-						}
-					}
 
-					value := args[i+1]
 					DstField := dst.Field(cmd.Flags[j].Index)
-					if cmd.Flags[j].Kind == "bool" && strings.HasPrefix(value, "-") {
-						if DstField.CanSet() {
-							DstField.SetBool(true)
+					if cmd.Flags[j].Kind == "bool" {
+						var val bool
+						if strings.HasPrefix(rawName, "!") {
+							val = false
+						} else {
+							val = true
 						}
-						WritedFields = append(WritedFields, args[i])
+
+						if DstField.CanSet() {
+							DstField.SetBool(val)
+						}
+						WritedFields = append(WritedFields, "--"+cmd.Flags[j].Name)
+
 						goto skip
 					}
+
+					if i+1 >= len(args) {
+						return nil, cmd, fmt.Errorf("%s requires %s", name, cmd.Flags[j].Kind)
+					}
+					value := args[i+1]
+
 					err = setValue(DstField, value)
 
 					switch err {
@@ -227,6 +225,7 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 					}
 					WritedFields = append(WritedFields, args[i])
 					i++
+					break
 				}
 			}
 			if !Found {
@@ -254,7 +253,7 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 						break
 					}
 				} else if strings.HasPrefix(WritedFields[j], "-") {
-					if WritedFields[j][1:] == cmd.Flags[i].Name {
+					if cmd.Flags[i].Alias != nil && WritedFields[j][1:] == *cmd.Flags[i].Alias {
 						Found = true
 						break
 					}
@@ -362,13 +361,6 @@ func setValue(dst reflect.Value, value string) error {
 			return errCanNotParse
 		}
 		dst.SetFloat(val)
-	case reflect.Bool:
-		var val bool
-		val, err = strconv.ParseBool(value)
-		if err != nil {
-			return errCanNotParse
-		}
-		dst.SetBool(val)
 	case reflect.Slice:
 		val := strings.Split(value, ",")
 		if dst.Cap() < len(val) {
