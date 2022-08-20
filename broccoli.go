@@ -418,6 +418,7 @@ func Bind(dst interface{}, args []string) ([]string, App, error) {
 	return a.Bind(dst, args)
 }
 
+// BindOSArgs bind os args to struct
 func BindOSArgs(dst interface{}) []string {
 	a, err := NewApp(dst)
 	if err != nil {
