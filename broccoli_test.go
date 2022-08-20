@@ -164,4 +164,33 @@ func TestBindOSArgs(t *testing.T) {
 			t.Errorf("expected age to be 42, got %d", app.Age)
 		}
 	})
+
+	t.Run("test-boolean-flags", func(t *testing.T) {
+		type TestApp struct {
+			_     struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
+			Bool0 bool     `flag:"bool0" about:"A boolean flag"`
+			Bool1 bool     `flag:"bool1" about:"A boolean flag"`
+			Bool2 bool     `flag:"bool2" about:"A boolean flag"`
+		}
+		var app TestApp
+		args, _, err := Bind(&app, []string{"--bool0", "--bool1", "false", "--bool2", "True"})
+		if err != nil {
+			t.Error(err)
+		}
+		if len(args) != 0 {
+			t.Errorf("expected 0 args, got %d", len(args))
+		}
+
+		if !app.Bool0 {
+			t.Error("expected Bool0 to be true")
+		}
+
+		if app.Bool1 {
+			t.Error("expected Bool1 to be false")
+		}
+
+		if !app.Bool2 {
+			t.Error("expected Bool2 to be false")
+		}
+	})
 }
