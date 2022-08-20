@@ -446,21 +446,24 @@ func BindOSArgs(dst interface{}) []string {
 
 			// Write Command and Version
 			sb.WriteString(app.c.Command)
-			if a.c.Version != nil {
+			if app.c.Version != nil {
 				sb.WriteRune(' ')
 				sb.WriteString(*app.c.Version)
 			}
 			sb.WriteRune('\n')
 
 			// Write Author
-			if a.c.Author != nil {
+			if app.c.Author != nil {
 				sb.WriteString(*app.c.Author)
 				sb.WriteRune('\n')
 			}
 
 			// Write LongAbout
-			if a.c.LongAbout != nil {
+			if app.c.LongAbout != nil {
 				sb.WriteString(*app.c.LongAbout)
+				sb.WriteRune('\n')
+			} else if app.c.About != nil {
+				sb.WriteString(*app.c.About)
 				sb.WriteRune('\n')
 			}
 
