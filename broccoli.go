@@ -204,6 +204,13 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 
 					value := args[i+1]
 					DstField := dst.Field(cmd.Flags[j].Index)
+					if cmd.Flags[j].Kind == "bool" && strings.HasPrefix(value, "-") {
+						if DstField.CanSet() {
+							DstField.SetBool(true)
+						}
+						WritedFields = append(WritedFields, args[i])
+						goto skip
+					}
 					err = setValue(DstField, value)
 
 					switch err {
@@ -232,6 +239,7 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 			break
 		}
 
+	skip:
 		MaxIndex = i
 	}
 
