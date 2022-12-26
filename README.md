@@ -1,5 +1,5 @@
 [![GitHub](https://img.shields.io/github/license/unsafe-risk/broccoli?style=for-the-badge)](https://github.com/unsafe-risk/broccoli/blob/main/LICENSE)
-[![GitHub Workflow Status (event)](https://img.shields.io/github/workflow/status/unsafe-risk/broccoli/go-test?event=push&style=for-the-badge)](https://github.com/unsafe-risk/broccoli/actions/workflows/go-test.yml)
+[![GitHub Workflow Status (event)](https://img.shields.io/github/actions/workflow/status/unsafe-risk/broccoli/go-test.yml?event=push&style=for-the-badge)](https://github.com/unsafe-risk/broccoli/actions/workflows/go-test.yml)
 [![Go Reference](https://img.shields.io/badge/go-reference-%23007d9c?style=for-the-badge&logo=go)](https://pkg.go.dev/v8.run/go/broccoli)
 
 # broccoli
