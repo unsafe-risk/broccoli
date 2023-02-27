@@ -14,7 +14,7 @@ package main
 import (
 	"fmt"
 
-	"v8.run/go/broccoli"
+	"gopkg.eu.org/broccoli"
 )
 
 type Config struct {
