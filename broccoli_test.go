@@ -2,6 +2,7 @@ package broccoli
 
 import (
 	"math"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -9,7 +10,7 @@ import (
 func TestBindArgs(t *testing.T) {
 	t.Run("test-no-args", func(t *testing.T) {
 		type NoArgsApp struct {
-			_ struct{} `version:"1.0.0" command:"NoArgsApp" about:"This is a test app"`
+			_ struct{} `version:"1.0.0" command:"NoArgsApp" about:"This is a test application"`
 		}
 		var app NoArgsApp
 		args, _, err := Bind(&app, []string{})
@@ -23,7 +24,7 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-flags", func(t *testing.T) {
 		type LongFlagApp struct {
-			_         struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
+			_         struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test application"`
 			FirstName string   `flag:"name" about:"Your first name"`
 			LastName  string   `flag:"last" about:"Your last name"`
 
@@ -53,7 +54,7 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-required-flags", func(t *testing.T) {
 		type RequiredFlagsApp struct {
-			_    struct{} `version:"1.0.0" command:"RequiredFlagsApp" about:"This is a test app"`
+			_    struct{} `version:"1.0.0" command:"RequiredFlagsApp" about:"This is a test application"`
 			Name string   `flag:"name" alias:"n" required:"true" about:"Your first name"`
 			Age  int      `flag:"age" alias:"a" required:"true" about:"Your age"`
 		}
@@ -66,7 +67,7 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-default-flags", func(t *testing.T) {
 		type DefaultFlagsApp struct {
-			_    struct{} `version:"1.0.0" command:"DefaultFlagsApp" about:"This is a test app"`
+			_    struct{} `version:"1.0.0" command:"DefaultFlagsApp" about:"This is a test application"`
 			Name string   `flag:"name" alias:"n" required:"true" about:"Your first name" default:"John"`
 			Age  int      `flag:"age" alias:"a" required:"true" about:"Your age" default:"42"`
 		}
@@ -90,12 +91,12 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-subcommand", func(t *testing.T) {
 		type AddApp struct {
-			_ struct{} `version:"1.0.0" command:"add" about:"This is a test app"`
-			A int      `flag:"a" alias:"a" required:"true" about:"A"`
-			B int      `flag:"b" alias:"b" required:"true" about:"B"`
+			_ struct{} `version:"1.0.0" command:"add" about:"This is a test application"`
+			A int      `flag:"a" alias:"a" required:"true" about:"Value A"`
+			B int      `flag:"b" alias:"b" required:"true" about:"Value B"`
 		}
 		type SubcommandApp struct {
-			_    struct{} `version:"1.0.0" command:"SubcommandApp" about:"This is a test app"`
+			_    struct{} `version:"1.0.0" command:"SubcommandApp" about:"This is a test application"`
 			Name string   `flag:"name" alias:"n" required:"true" about:"Your first name" default:"John"`
 			Age  int      `flag:"age" alias:"a" required:"true" about:"Your age" default:"42"`
 			Add  *AddApp  `subcommand:"add" about:"Add two numbers"`
@@ -125,7 +126,7 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-args", func(t *testing.T) {
 		type TestApp struct {
-			_         struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
+			_         struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test application"`
 			FirstName string   `flag:"name" about:"Your first name"`
 
 			Age int `flag:"age" about:"Your age"`
@@ -142,7 +143,7 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-alias", func(t *testing.T) {
 		type TestApp struct {
-			_         struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
+			_         struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test application"`
 			FirstName string   `flag:"name" alias:"n" about:"Your first name"`
 
 			Age int `flag:"age" alias:"a" about:"Your age"`
@@ -168,7 +169,7 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-boolean-flags", func(t *testing.T) {
 		type TestApp struct {
-			_     struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
+			_     struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test application"`
 			Bool0 bool     `flag:"bool0" about:"A boolean flag"`
 			Bool1 bool     `flag:"bool1" about:"A boolean flag"`
 			Bool2 bool     `flag:"bool2" about:"A boolean flag"`
@@ -197,7 +198,7 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-default-boolean-flags", func(t *testing.T) {
 		type TestApp struct {
-			_     struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
+			_     struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test application"`
 			Bool0 bool     `flag:"bool0" about:"A boolean flag" default:"true" alias:"b0"`
 			Bool1 bool     `flag:"bool1" about:"A boolean flag" default:"false" alias:"b1"`
 			Bool2 bool     `flag:"bool2" about:"A boolean flag" default:"true" alias:"b2"`
@@ -224,7 +225,7 @@ func TestBindArgs(t *testing.T) {
 
 	t.Run("test-flags", func(t *testing.T) {
 		type TestApp struct {
-			_    struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test app"`
+			_    struct{} `version:"1.0.0" command:"LongFlagApp" about:"This is a test application"`
 			Name string   `flag:"name" about:"Your name" required:"true"`
 			Age  int      `flag:"age" about:"Your age" required:"true"`
 
@@ -292,4 +293,79 @@ func TestBindArgs(t *testing.T) {
 
 func floatCompare(a, b float64) bool {
 	return math.Abs(a-b) < 0.00001
+}
+
+func TestEnvMatches(t *testing.T) {
+	t.Run("test-env-binding", func(t *testing.T) {
+		type EnvApp struct {
+			_    struct{} `version:"1.0.0" command:"EnvApp"`
+			Port int      `flag:"port" env:"BROCCOLI_PORT" default:"8080"`
+			Host string   `flag:"host" env:"BROCCOLI_HOST"`
+		}
+
+		os.Setenv("BROCCOLI_PORT", "9090")
+		os.Setenv("BROCCOLI_HOST", "localhost")
+		defer os.Unsetenv("BROCCOLI_PORT")
+		defer os.Unsetenv("BROCCOLI_HOST")
+
+		var app EnvApp
+		args, _, err := Bind(&app, []string{})
+		if err != nil {
+			t.Error(err)
+		}
+		if len(args) != 0 {
+			t.Errorf("expected 0 args, got %d", len(args))
+		}
+
+		if app.Port != 9090 {
+			t.Errorf("expected port to be 9090, got %d", app.Port)
+		}
+		if app.Host != "localhost" {
+			t.Errorf("expected host to be localhost, got %s", app.Host)
+		}
+	})
+
+	t.Run("test-env-binding-override", func(t *testing.T) {
+		type EnvApp struct {
+			_    struct{} `version:"1.0.0" command:"EnvApp"`
+			Port int      `flag:"port" env:"BROCCOLI_PORT_OVERRIDE" default:"8080"`
+		}
+
+		os.Setenv("BROCCOLI_PORT_OVERRIDE", "9090")
+		defer os.Unsetenv("BROCCOLI_PORT_OVERRIDE")
+
+		var app EnvApp
+		// Explicit arg should override env
+		args, _, err := Bind(&app, []string{"--port", "7070"})
+		if err != nil {
+			t.Error(err)
+		}
+		if len(args) != 0 {
+			t.Errorf("expected 0 args, got %d", len(args))
+		}
+
+		if app.Port != 7070 {
+			t.Errorf("expected port to be 7070, got %d", app.Port)
+		}
+	})
+
+	t.Run("test-default-value-non-required", func(t *testing.T) {
+		type DefaultApp struct {
+			_    struct{} `version:"1.0.0" command:"DefaultApp"`
+			Name string   `flag:"name" default:"Guest"`
+		}
+
+		var app DefaultApp
+		args, _, err := Bind(&app, []string{})
+		if err != nil {
+			t.Error(err)
+		}
+		if len(args) != 0 {
+			t.Errorf("expected 0 args, got %d", len(args))
+		}
+
+		if app.Name != "Guest" {
+			t.Errorf("expected name to be 'Guest', got '%s'", app.Name)
+		}
+	})
 }

@@ -12,6 +12,7 @@ import (
 	"sync"
 )
 
+// command represents the internal structure for a CLI command.
 type command struct {
 	initOnce *sync.Once `json:"-"`
 	Parent   *command   `json:"-"`
@@ -35,10 +36,12 @@ type fieldMeta struct {
 	About    string       `json:"about"`
 	Index    int          `json:"index"`
 	Default  *string      `json:"default,omitempty"`
+	Env      *string      `json:"env,omitempty"`
 	Alias    *string      `json:"alias,omitempty"`
 	Required bool         `json:"required"`
 }
 
+// ErrTypeNotSupported is returned when a field type is not supported.
 var ErrTypeNotSupported = errors.New("broccoli: type not supported")
 
 func buildCommand(rt reflect.Type, parent *command, commandName string) (*command, error) {
@@ -109,6 +112,9 @@ func buildCommand(rt reflect.Type, parent *command, commandName string) (*comman
 			if v, ok := st.Lookup("default"); ok {
 				fm.Default = &v
 			}
+			if v, ok := st.Lookup("env"); ok {
+				fm.Env = &v
+			}
 			if v, ok := st.Lookup("alias"); ok {
 				fm.Alias = &v
 			}
@@ -131,7 +137,7 @@ func buildCommand(rt reflect.Type, parent *command, commandName string) (*comman
 
 var ErrTypeMismatch = errors.New("broccoli: type mismatch")
 var ErrMissingRequiredField = errors.New("broccoli: missing required field")
-var ErrHelp = errors.New("broccoli: help")
+var ErrHelp = errors.New("broccoli: help requested")
 
 func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *command, error) {
 	cmd.init()
@@ -161,7 +167,8 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 
 	var err error
 	var wfb [32]string
-	var WritedFields []string = wfb[:0]
+	// WrittenFields tracks which flags were explicitly set by arguments
+	var WrittenFields []string = wfb[:0]
 	var MaxIndex int = 0
 
 	for i := 0; i < len(args); i++ {
@@ -199,7 +206,10 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 						if DstField.CanSet() {
 							DstField.SetBool(val)
 						}
-						WritedFields = append(WritedFields, "--"+cmd.Flags[j].Name)
+						if DstField.CanSet() {
+							DstField.SetBool(val)
+						}
+						WrittenFields = append(WrittenFields, "--"+cmd.Flags[j].Name)
 
 						goto skip
 					}
@@ -223,7 +233,7 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 						// Unknown Error
 						return nil, cmd, err
 					}
-					WritedFields = append(WritedFields, args[i])
+					WrittenFields = append(WrittenFields, args[i])
 					i++
 					break
 				}
@@ -242,45 +252,66 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 		MaxIndex = i
 	}
 
-	// Check Required Fields
+	// Check Fields and Apply Defaults/Env
 	for i := range cmd.Flags {
-		if cmd.Flags[i].Required {
-			var Found bool = false
-			for j := range WritedFields {
-				if strings.HasPrefix(WritedFields[j], "--") {
-					if WritedFields[j][2:] == cmd.Flags[i].Name {
-						Found = true
-						break
-					}
-				} else if strings.HasPrefix(WritedFields[j], "-") {
-					if cmd.Flags[i].Alias != nil && WritedFields[j][1:] == *cmd.Flags[i].Alias {
-						Found = true
-						break
-					}
-				} else {
-					// Unreachable
-					panic("unreachable")
+		var Found bool = false
+		for j := range WrittenFields {
+			if strings.HasPrefix(WrittenFields[j], "--") {
+				if WrittenFields[j][2:] == cmd.Flags[i].Name {
+					Found = true
+					break
 				}
+			} else if strings.HasPrefix(WrittenFields[j], "-") {
+				if cmd.Flags[i].Alias != nil && WrittenFields[j][1:] == *cmd.Flags[i].Alias {
+					Found = true
+					break
+				}
+			} else {
+				// Unreachable
+				panic("unreachable")
 			}
-			if !Found {
-				if cmd.Flags[i].Default != nil {
+		}
+
+		// If the flag was NOT provided in arguments
+		if !Found {
+			// 1. Try Environment Variable
+			if cmd.Flags[i].Env != nil {
+				if val, ok := os.LookupEnv(*cmd.Flags[i].Env); ok {
 					DstField := dst.Field(cmd.Flags[i].Index)
-					err = setValue(DstField, *cmd.Flags[i].Default)
+					err = setValue(DstField, val)
 					switch err {
 					case errCanNotParse:
-						// Parse Error
-						return nil, cmd, fmt.Errorf("can not parse (default value) %s as %s", strconv.Quote(*cmd.Flags[i].Default), cmd.Flags[i].Kind)
+						return nil, cmd, fmt.Errorf("can not parse (env %s) %s as %s", *cmd.Flags[i].Env, strconv.Quote(val), cmd.Flags[i].Kind)
 					case errCanNotSet:
 						// Ignore Error
 					case nil:
 						// No Error
 					default:
-						// Unknown Error
 						return nil, cmd, err
 					}
 					continue
 				}
+			}
 
+			// 2. Try Default Value
+			if cmd.Flags[i].Default != nil {
+				DstField := dst.Field(cmd.Flags[i].Index)
+				err = setValue(DstField, *cmd.Flags[i].Default)
+				switch err {
+				case errCanNotParse:
+					return nil, cmd, fmt.Errorf("can not parse (default value) %s as %s", strconv.Quote(*cmd.Flags[i].Default), cmd.Flags[i].Kind)
+				case errCanNotSet:
+					// Ignore Error
+				case nil:
+					// No Error
+				default:
+					return nil, cmd, err
+				}
+				continue
+			}
+
+			// 3. Check Required
+			if cmd.Flags[i].Required {
 				return nil, cmd, fmt.Errorf("required parameter %s is missing", cmd.Flags[i].Name)
 			}
 		}
@@ -292,8 +323,8 @@ func bindCommand(cmd *command, args []string, dst reflect.Value) ([]string, *com
 	return args[MaxIndex+1:], cmd, nil
 }
 
-var errCanNotParse = errors.New("can not parse")
-var errCanNotSet = errors.New("can not set")
+var errCanNotParse = errors.New("cannot parse value")
+var errCanNotSet = errors.New("cannot set value")
 
 func setValue(dst reflect.Value, value string) error {
 	var err error
@@ -378,15 +409,21 @@ func setValue(dst reflect.Value, value string) error {
 	return err
 }
 
+// App represents the main application structure for the CLI.
+// It holds the command configuration and provides methods to bind arguments and generate help/schema.
 type App struct {
 	c *command
 }
 
+// Help returns the generated help message string for the application.
+// It initializes the command structure if it hasn't been initialized yet.
 func (a *App) Help() string {
 	a.c.init()
 	return a.c.Help
 }
 
+// Schema returns the JSON representation of the command structure.
+// This matches the internal structure used to define commands and flags.
 func (a *App) Schema() string {
 	a.c.init()
 	data, err := json.Marshal(a.c)
@@ -396,6 +433,9 @@ func (a *App) Schema() string {
 	return string(data)
 }
 
+// NewApp creates a new App instance from a struct configuration.
+// v must be a pointer to a struct that defines the CLI commands and flags using tags.
+// It automatically detects the executable name from the OS arguments or the executable path.
 func NewApp(v interface{}) (*App, error) {
 	rv := reflect.ValueOf(v)
 	exe, err := os.Executable()
@@ -416,6 +456,8 @@ func NewApp(v interface{}) (*App, error) {
 	return &App{c: cmd}, nil
 }
 
+// Bind parses the provided arguments and sets the values in the destination struct dst.
+// It returns the remaining arguments that were not parsed as flags, the App instance, and any error encountered.
 func (a *App) Bind(dst interface{}, args []string) ([]string, App, error) {
 	ra, cmd, err := bindCommand(a.c, args, reflect.ValueOf(dst))
 	if err != nil {
@@ -424,6 +466,8 @@ func (a *App) Bind(dst interface{}, args []string) ([]string, App, error) {
 	return ra, App{c: cmd}, nil
 }
 
+// Bind creates a new App and binds the provided arguments to the destination struct dst.
+// This is a shorthand for NewApp(dst) followed by a.Bind(dst, args).
 func Bind(dst interface{}, args []string) ([]string, App, error) {
 	a, err := NewApp(dst)
 	if err != nil {
@@ -432,7 +476,10 @@ func Bind(dst interface{}, args []string) ([]string, App, error) {
 	return a.Bind(dst, args)
 }
 
-// BindOSArgs bind os args to struct
+// BindOSArgs binds the command-line arguments (os.Args) to the destination struct dst.
+// It automatically handles "--help" and version printing, exiting the program if necessary.
+// If an error occurs during binding (e.g., missing required flags), it prints the error and help message to stderr and exits with status 1.
+// It returns the remaining non-flag arguments.
 func BindOSArgs(dst interface{}) []string {
 	a, err := NewApp(dst)
 	if err != nil {
@@ -566,6 +613,12 @@ func (a *command) init() {
 				if a.Flags[i].Default != nil {
 					sb.WriteString("[default: ")
 					sb.WriteString(*a.Flags[i].Default)
+					sb.WriteRune(']')
+				}
+				if a.Flags[i].Env != nil {
+					sb.WriteRune(' ')
+					sb.WriteString("[env: ")
+					sb.WriteString(*a.Flags[i].Env)
 					sb.WriteRune(']')
 				}
 				if a.Flags[i].Required {

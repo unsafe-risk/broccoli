@@ -2,11 +2,22 @@
 [![GitHub Workflow Status (event)](https://img.shields.io/github/actions/workflow/status/unsafe-risk/broccoli/go-test.yml?event=push&style=for-the-badge)](https://github.com/unsafe-risk/broccoli/actions/workflows/go-test.yml)
 [![Go Reference](https://img.shields.io/badge/go-reference-%23007d9c?style=for-the-badge&logo=go)](https://pkg.go.dev/gopkg.eu.org/broccoli)
 
-# broccoli
+# Broccoli
 
-Broccoli: [CLI](https://en.wikipedia.org/wiki/Command-line_interface) Package for Go
+Broccoli: A lightweight, struct-based [CLI](https://en.wikipedia.org/wiki/Command-line_interface) package for Go.
+
+## Features
+
+- **Struct-based Configuration**: Define your CLI interface using standard Go structs and tags.
+- **Nested Subcommands**: Easily create deeply nested subcommands.
+- **Flexible Flags**: Support for both long (`--flag`) and short (`-f`) flags.
+- **Environment Variables**: Automatically bind flags to environment variables.
+- **Defaults**: Robust support for default values.
+- **Auto-generated Help**: Automatically generates comprehensive help messages.
 
 ## Usage
+
+### Basic Example
 
 ```go
 package main
@@ -18,7 +29,7 @@ import (
 )
 
 type Config struct {
-	_    struct{} `version:"0.0.1" command:"hello" about:"Test App"`
+	_    struct{} `version:"0.0.1" command:"hello" about:"Test Application"`
 	Name string   `flag:"name" alias:"n" required:"true" about:"Your name"`
 
 	Sub *SubCommand `subcommand:"sub"`
@@ -31,6 +42,8 @@ type SubCommand struct {
 
 func main() {
 	var cfg Config
+	// BindOSArgs parses os.Args and populates the cfg struct.
+	// It handles --help and exiting on error automatically.
 	_ = broccoli.BindOSArgs(&cfg)
 
 	if cfg.Sub != nil {
@@ -42,13 +55,15 @@ func main() {
 }
 ```
 
-```
+**Output:**
+
+```bash
 $ hello --help
 hello 0.0.1
-Test App
+Test Application
 
 Usage:
-        hello <COMMAND> [OPTIONS] --name <NAME> [ARGUEMENTS]
+        hello <COMMAND> [OPTIONS] --name <NAME> [ARGUMENTS]
 
 Options:
         -n, --name     Your name  (required)
@@ -63,6 +78,19 @@ Hello World from main command
 $ hello sub --name World
 Hello World from sub command
 ```
+
+### Environment Variables
+
+You can bind flags to environment variables using the `env` tag.
+
+```go
+type ServerConfig struct {
+    Port int    `flag:"port" env:"PORT" default:"8080" about:"Port to listen on"`
+    Host string `flag:"host" env:"HOST" default:"localhost" about:"Host to bind to"`
+}
+```
+
+If the flag is not provided in the command line arguments, `broccoli` will check the `PORT` environment variable. If that is also missing, it will use the `default` value `8080`.
 
 ## Installation
 
