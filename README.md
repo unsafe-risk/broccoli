@@ -36,7 +36,7 @@ type Config struct {
 }
 
 type SubCommand struct {
-	_    struct{} `command:"sub" longabout:"Test Sub Command"`
+	_    struct{} `command:"sub" about:"Test Sub Command"`
 	Name string   `flag:"name" alias:"n" required:"true" about:"Your name"`
 }
 
@@ -62,15 +62,15 @@ $ hello --help
 hello 0.0.1
 Test Application
 
-Usage:
-        hello <COMMAND> [OPTIONS] --name <NAME> [ARGUMENTS]
+Usage: 
+	hello <COMMAND> [OPTIONS] --name <NAME> [ARGUMENTS]
 
 Options:
-        -n, --name     Your name  (required)
-        -h, --help     Print this help message and exit
+	-n, --name     Your name  (required)
+	-h, --help     Print this help message and exit
 
 Commands:
-        sub    Test Sub Command
+	sub    Test Sub Command
 
 $ hello --name World
 Hello World from main command
