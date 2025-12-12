@@ -570,7 +570,7 @@ func (a *command) init() {
 				}
 			}
 		}
-		sb.WriteString(" [ARGUEMENTS]\n\n")
+		sb.WriteString(" [ARGUMENTS]\n\n")
 
 		// Write Options
 		if len(a.Flags) > 0 {
